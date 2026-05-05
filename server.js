@@ -125,6 +125,34 @@ app.post("/api/announcements", (req, res) => {
 });
 
 /* =========================
+   ANNOUNCEMENTS - DELETE (🔥 FIX)
+========================= */
+
+app.delete("/api/announcements/:id", (req, res) => {
+  if (!loggedIn) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  const id = Number(req.params.id);
+
+  const index = announcements.findIndex(a => Number(a.id) === id);
+
+  if (index === -1) {
+    return res.status(404).json({
+      success: false,
+      message: "Announcement not found"
+    });
+  }
+
+  const deleted = announcements.splice(index, 1)[0];
+
+  res.json({
+    success: true,
+    deleted
+  });
+});
+
+/* =========================
    START SERVER
 ========================= */
 
