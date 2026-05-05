@@ -24,6 +24,7 @@ let loggedIn = false;
    DATA STORAGE (IN MEMORY)
 ========================= */
 
+/* ANNOUNCEMENTS */
 let announcements = [
   {
     id: 1,
@@ -44,6 +45,23 @@ let announcements = [
 ];
 
 let nextAnnouncementId = 2;
+
+/* CONTENT (WEB EDITOR) */
+let content = {
+  hero: {
+    badge: "",
+    title: "",
+    titleAccent: "",
+    subtitle: "",
+    urgentStripText: "",
+    urgentStripAction: "",
+    chipPrimary: "",
+    chipSecondary: ""
+  },
+  contact: {
+    phone: ""
+  }
+};
 
 /* =========================
    LOGIN
@@ -125,7 +143,7 @@ app.post("/api/announcements", (req, res) => {
 });
 
 /* =========================
-   ANNOUNCEMENTS - DELETE (🔥 FIX)
+   ANNOUNCEMENTS - DELETE
 ========================= */
 
 app.delete("/api/announcements/:id", (req, res) => {
@@ -150,6 +168,44 @@ app.delete("/api/announcements/:id", (req, res) => {
     success: true,
     deleted
   });
+});
+
+/* =========================
+   CONTENT - GET
+========================= */
+
+app.get("/api/content", (req, res) => {
+  res.json(content);
+});
+
+/* =========================
+   CONTENT - PUT
+========================= */
+
+app.put("/api/content", (req, res) => {
+  if (!loggedIn) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  const body = req.body;
+
+  content = {
+    hero: {
+      badge: body.hero?.badge || "",
+      title: body.hero?.title || "",
+      titleAccent: body.hero?.titleAccent || "",
+      subtitle: body.hero?.subtitle || "",
+      urgentStripText: body.hero?.urgentStripText || "",
+      urgentStripAction: body.hero?.urgentStripAction || "",
+      chipPrimary: body.hero?.chipPrimary || "",
+      chipSecondary: body.hero?.chipSecondary || ""
+    },
+    contact: {
+      phone: body.contact?.phone || ""
+    }
+  };
+
+  res.json({ success: true, content });
 });
 
 /* =========================
