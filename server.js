@@ -46,7 +46,7 @@ let announcements = [
 
 let nextAnnouncementId = 2;
 
-/* CONTENT (WEB EDITOR) */
+/* CONTENT */
 let content = {
   hero: {
     badge: "",
@@ -143,6 +143,50 @@ app.post("/api/announcements", (req, res) => {
 });
 
 /* =========================
+   ANNOUNCEMENTS - PUT (EDIT FIX)
+========================= */
+
+app.put("/api/announcements/:id", (req, res) => {
+  if (!loggedIn) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  const id = Number(req.params.id);
+  const index = announcements.findIndex(a => Number(a.id) === id);
+
+  if (index === -1) {
+    return res.status(404).json({
+      success: false,
+      message: "Announcement not found"
+    });
+  }
+
+  const body = req.body;
+
+  announcements[index] = {
+    ...announcements[index],
+    title: body.title || "",
+    text: body.text || "",
+    color: body.color || "bg-blue-100",
+    type: body.type || "info",
+    startAt: body.startAt || announcements[index].startAt,
+    startPrecision: body.startPrecision || "datetime",
+    endAt: body.endAt || null,
+    endPrecision: body.endPrecision || "datetime",
+    audience: body.audience || "all",
+    location: body.location || "",
+    isPinned: body.isPinned || false,
+    isActive: body.isActive !== false,
+    updatedAt: new Date().toISOString()
+  };
+
+  res.json({
+    success: true,
+    announcement: announcements[index]
+  });
+});
+
+/* =========================
    ANNOUNCEMENTS - DELETE
 ========================= */
 
@@ -205,7 +249,10 @@ app.put("/api/content", (req, res) => {
     }
   };
 
-  res.json({ success: true, content });
+  res.json({
+    success: true,
+    content
+  });
 });
 
 /* =========================
