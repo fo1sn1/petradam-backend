@@ -1,16 +1,82 @@
 import express from "express";
 import cors from "cors";
+import fs from "fs";
+import path from "path";
 
 const app = express();
+
+/* =========================
+   CONFIG
+========================= */
+
+const DATA_DIR = "./data";
+const ANNOUNCEMENTS_FILE = path.join(DATA_DIR, "announcements.json");
+const CONTENT_FILE = path.join(DATA_DIR, "content.json");
+
+/* =========================
+   INIT FILES
+========================= */
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR);
+}
+
+if (!fs.existsSync(ANNOUNCEMENTS_FILE)) {
+  fs.writeFileSync(ANNOUNCEMENTS_FILE, "[]");
+}
+
+if (!fs.existsSync(CONTENT_FILE)) {
+  fs.writeFileSync(
+    CONTENT_FILE,
+    JSON.stringify(
+      {
+        hero: {},
+        contact: {}
+      },
+      null,
+      2
+    )
+  );
+}
+
+/* =========================
+   HELPERS
+========================= */
+
+function loadJSON(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function saveJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
+/* =========================
+   LOAD DATA
+========================= */
+
+let announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
+let content = loadJSON(CONTENT_FILE) || { hero: {}, contact: {} };
+
+let nextAnnouncementId =
+  announcements.length > 0
+    ? Math.max(...announcements.map(a => a.id)) + 1
+    : 1;
 
 /* =========================
    MIDDLEWARE
 ========================= */
 
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: true,
+    credentials: true
+  })
+);
 
 app.use(express.json());
 
@@ -21,77 +87,21 @@ app.use(express.json());
 let loggedIn = false;
 
 /* =========================
-   DATA STORAGE (IN MEMORY)
-========================= */
-
-/* ANNOUNCEMENTS */
-let announcements = [
-  {
-    id: 1,
-    title: "Test oznámení",
-    text: "Toto je ukázkové oznámení",
-    color: "bg-blue-100",
-    type: "info",
-    startAt: new Date().toISOString(),
-    startPrecision: "datetime",
-    endAt: null,
-    endPrecision: "datetime",
-    audience: "all",
-    location: "",
-    isPinned: false,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  }
-];
-
-let nextAnnouncementId = 2;
-
-/* CONTENT */
-let content = {
-  hero: {
-    badge: "",
-    title: "",
-    titleAccent: "",
-    subtitle: "",
-    urgentStripText: "",
-    urgentStripAction: "",
-    chipPrimary: "",
-    chipSecondary: ""
-  },
-  contact: {
-    phone: ""
-  }
-};
-
-/* =========================
    LOGIN
 ========================= */
 
 app.post("/api/login", (req, res) => {
-  const { password } = req.body;
-
-  if (password === "admin") {
+  if (req.body.password === "admin") {
     loggedIn = true;
-    return res.json({ success: true, token: "123" });
+    return res.json({ success: true });
   }
 
-  return res.status(401).json({
-    success: false,
-    message: "Wrong password"
-  });
+  res.status(401).json({ success: false });
 });
-
-/* =========================
-   CHECK AUTH
-========================= */
 
 app.get("/api/check-auth", (req, res) => {
   res.json({ authenticated: loggedIn });
 });
-
-/* =========================
-   LOGOUT
-========================= */
 
 app.post("/api/logout", (req, res) => {
   loggedIn = false;
@@ -99,42 +109,24 @@ app.post("/api/logout", (req, res) => {
 });
 
 /* =========================
-   ANNOUNCEMENTS - GET
+   ANNOUNCEMENTS
 ========================= */
 
 app.get("/api/announcements", (req, res) => {
   res.json(announcements);
 });
 
-/* =========================
-   ANNOUNCEMENTS - POST
-========================= */
-
 app.post("/api/announcements", (req, res) => {
-  if (!loggedIn) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
-  }
-
-  const body = req.body;
+  if (!loggedIn) return res.status(401).json({});
 
   const newAnnouncement = {
     id: nextAnnouncementId++,
-    title: body.title || "",
-    text: body.text || "",
-    color: body.color || "bg-blue-100",
-    type: body.type || "info",
-    startAt: body.startAt || new Date().toISOString(),
-    startPrecision: body.startPrecision || "datetime",
-    endAt: body.endAt || null,
-    endPrecision: body.endPrecision || "datetime",
-    audience: body.audience || "all",
-    location: body.location || "",
-    isPinned: body.isPinned || false,
-    isActive: true,
+    ...req.body,
     createdAt: new Date().toISOString()
   };
 
   announcements.unshift(newAnnouncement);
+  saveJSON(ANNOUNCEMENTS_FILE, announcements);
 
   res.json({
     success: true,
@@ -142,43 +134,24 @@ app.post("/api/announcements", (req, res) => {
   });
 });
 
-/* =========================
-   ANNOUNCEMENTS - PUT (EDIT FIX)
-========================= */
-
+/* ✅ EDIT FIX + SAVE */
 app.put("/api/announcements/:id", (req, res) => {
-  if (!loggedIn) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
-  }
+  if (!loggedIn) return res.status(401).json({});
 
   const id = Number(req.params.id);
-  const index = announcements.findIndex(a => Number(a.id) === id);
+  const index = announcements.findIndex(a => a.id === id);
 
   if (index === -1) {
-    return res.status(404).json({
-      success: false,
-      message: "Announcement not found"
-    });
+    return res.status(404).json({ error: "Not found" });
   }
-
-  const body = req.body;
 
   announcements[index] = {
     ...announcements[index],
-    title: body.title || "",
-    text: body.text || "",
-    color: body.color || "bg-blue-100",
-    type: body.type || "info",
-    startAt: body.startAt || announcements[index].startAt,
-    startPrecision: body.startPrecision || "datetime",
-    endAt: body.endAt || null,
-    endPrecision: body.endPrecision || "datetime",
-    audience: body.audience || "all",
-    location: body.location || "",
-    isPinned: body.isPinned || false,
-    isActive: body.isActive !== false,
+    ...req.body,
     updatedAt: new Date().toISOString()
   };
+
+  saveJSON(ANNOUNCEMENTS_FILE, announcements);
 
   res.json({
     success: true,
@@ -186,68 +159,46 @@ app.put("/api/announcements/:id", (req, res) => {
   });
 });
 
-/* =========================
-   ANNOUNCEMENTS - DELETE
-========================= */
-
 app.delete("/api/announcements/:id", (req, res) => {
-  if (!loggedIn) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
-  }
+  if (!loggedIn) return res.status(401).json({});
 
   const id = Number(req.params.id);
 
-  const index = announcements.findIndex(a => Number(a.id) === id);
+  announcements = announcements.filter(a => a.id !== id);
 
-  if (index === -1) {
-    return res.status(404).json({
-      success: false,
-      message: "Announcement not found"
-    });
-  }
+  saveJSON(ANNOUNCEMENTS_FILE, announcements);
 
-  const deleted = announcements.splice(index, 1)[0];
-
-  res.json({
-    success: true,
-    deleted
-  });
+  res.json({ success: true });
 });
 
 /* =========================
-   CONTENT - GET
+   CONTENT
 ========================= */
 
 app.get("/api/content", (req, res) => {
   res.json(content);
 });
 
-/* =========================
-   CONTENT - PUT
-========================= */
-
 app.put("/api/content", (req, res) => {
-  if (!loggedIn) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
-  }
-
-  const body = req.body;
+  if (!loggedIn) return res.status(401).json({});
 
   content = {
     hero: {
-      badge: body.hero?.badge || "",
-      title: body.hero?.title || "",
-      titleAccent: body.hero?.titleAccent || "",
-      subtitle: body.hero?.subtitle || "",
-      urgentStripText: body.hero?.urgentStripText || "",
-      urgentStripAction: body.hero?.urgentStripAction || "",
-      chipPrimary: body.hero?.chipPrimary || "",
-      chipSecondary: body.hero?.chipSecondary || ""
+      badge: req.body.hero?.badge || "",
+      title: req.body.hero?.title || "",
+      titleAccent: req.body.hero?.titleAccent || "",
+      subtitle: req.body.hero?.subtitle || "",
+      urgentStripText: req.body.hero?.urgentStripText || "",
+      urgentStripAction: req.body.hero?.urgentStripAction || "",
+      chipPrimary: req.body.hero?.chipPrimary || "",
+      chipSecondary: req.body.hero?.chipSecondary || ""
     },
     contact: {
-      phone: body.contact?.phone || ""
+      phone: req.body.contact?.phone || ""
     }
   };
+
+  saveJSON(CONTENT_FILE, content);
 
   res.json({
     success: true,
