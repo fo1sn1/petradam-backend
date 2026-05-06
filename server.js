@@ -18,7 +18,7 @@ const CONTENT_FILE = path.join(DATA_DIR, "content.json");
 ========================= */
 
 if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR);
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 if (!fs.existsSync(ANNOUNCEMENTS_FILE)) {
@@ -51,35 +51,20 @@ if (!fs.existsSync(CONTENT_FILE)) {
 }
 
 /* =========================
-   HELPERS
+   HELPERS (SAFE LOAD/SAVE)
 ========================= */
 
-function loadJSON(file) {
+function loadJSON(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf-8"));
-  } catch (err) {
-    return null;
+  } catch {
+    return fallback;
   }
 }
 
 function saveJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
-
-/* =========================
-   DATA CACHE
-========================= */
-
-let announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
-let content = loadJSON(CONTENT_FILE) || {
-  hero: {},
-  contact: {}
-};
-
-let nextAnnouncementId =
-  announcements.length > 0
-    ? Math.max(...announcements.map(a => a.id || 0)) + 1
-    : 1;
 
 /* =========================
    MIDDLEWARE
@@ -91,6 +76,12 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+/* 🚀 FIX CACHE (důležité proti “F5 cuknutí”) */
+app.use((req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 
 /* =========================
    AUTH
@@ -120,17 +111,17 @@ app.post("/api/logout", (req, res) => {
 ========================= */
 
 app.get("/api/announcements", (req, res) => {
-  announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
-  res.json(announcements);
+  const data = loadJSON(ANNOUNCEMENTS_FILE, []);
+  res.json(data);
 });
 
 app.post("/api/announcements", (req, res) => {
   if (!loggedIn) return res.status(401).json({ success: false });
 
-  announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
+  const announcements = loadJSON(ANNOUNCEMENTS_FILE, []);
 
   const newAnnouncement = {
-    id: nextAnnouncementId++,
+    id: Date.now(),
     title: req.body.title || "",
     text: req.body.text || "",
     color: req.body.color || "bg-blue-100",
@@ -149,16 +140,13 @@ app.post("/api/announcements", (req, res) => {
   announcements.unshift(newAnnouncement);
   saveJSON(ANNOUNCEMENTS_FILE, announcements);
 
-  res.json({
-    success: true,
-    announcement: newAnnouncement
-  });
+  res.json({ success: true, announcement: newAnnouncement });
 });
 
 app.put("/api/announcements/:id", (req, res) => {
   if (!loggedIn) return res.status(401).json({ success: false });
 
-  announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
+  const announcements = loadJSON(ANNOUNCEMENTS_FILE, []);
 
   const id = Number(req.params.id);
   const index = announcements.findIndex(a => a.id === id);
@@ -175,19 +163,15 @@ app.put("/api/announcements/:id", (req, res) => {
 
   saveJSON(ANNOUNCEMENTS_FILE, announcements);
 
-  res.json({
-    success: true,
-    announcement: announcements[index]
-  });
+  res.json({ success: true, announcement: announcements[index] });
 });
 
 app.delete("/api/announcements/:id", (req, res) => {
   if (!loggedIn) return res.status(401).json({ success: false });
 
-  announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
+  let announcements = loadJSON(ANNOUNCEMENTS_FILE, []);
 
   const id = Number(req.params.id);
-
   announcements = announcements.filter(a => a.id !== id);
 
   saveJSON(ANNOUNCEMENTS_FILE, announcements);
@@ -200,14 +184,14 @@ app.delete("/api/announcements/:id", (req, res) => {
 ========================= */
 
 app.get("/api/content", (req, res) => {
-  content = loadJSON(CONTENT_FILE) || content;
-  res.json(content);
+  const data = loadJSON(CONTENT_FILE, {});
+  res.json(data);
 });
 
 app.put("/api/content", (req, res) => {
   if (!loggedIn) return res.status(401).json({ success: false });
 
-  content = {
+  const content = {
     hero: {
       badge: req.body.hero?.badge || "",
       title: req.body.hero?.title || "",
@@ -225,10 +209,7 @@ app.put("/api/content", (req, res) => {
 
   saveJSON(CONTENT_FILE, content);
 
-  res.json({
-    success: true,
-    content
-  });
+  res.json({ success: true, content });
 });
 
 /* =========================
