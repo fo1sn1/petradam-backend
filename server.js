@@ -30,8 +30,19 @@ if (!fs.existsSync(CONTENT_FILE)) {
     CONTENT_FILE,
     JSON.stringify(
       {
-        hero: {},
-        contact: {}
+        hero: {
+          badge: "",
+          title: "",
+          titleAccent: "",
+          subtitle: "",
+          urgentStripText: "",
+          urgentStripAction: "",
+          chipPrimary: "",
+          chipSecondary: ""
+        },
+        contact: {
+          phone: ""
+        }
       },
       null,
       2
@@ -46,7 +57,7 @@ if (!fs.existsSync(CONTENT_FILE)) {
 function loadJSON(file) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf-8"));
-  } catch {
+  } catch (err) {
     return null;
   }
 }
@@ -56,47 +67,43 @@ function saveJSON(file, data) {
 }
 
 /* =========================
-   LOAD DATA
+   DATA CACHE
 ========================= */
 
 let announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
-let content = loadJSON(CONTENT_FILE) || { hero: {}, contact: {} };
+let content = loadJSON(CONTENT_FILE) || {
+  hero: {},
+  contact: {}
+};
 
 let nextAnnouncementId =
   announcements.length > 0
-    ? Math.max(...announcements.map(a => a.id)) + 1
+    ? Math.max(...announcements.map(a => a.id || 0)) + 1
     : 1;
 
 /* =========================
    MIDDLEWARE
 ========================= */
 
-app.use(
-  cors({
-    origin: true,
-    credentials: true
-  })
-);
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 
 app.use(express.json());
 
 /* =========================
-   FAKE SESSION
+   AUTH
 ========================= */
 
 let loggedIn = false;
-
-/* =========================
-   LOGIN
-========================= */
 
 app.post("/api/login", (req, res) => {
   if (req.body.password === "admin") {
     loggedIn = true;
     return res.json({ success: true });
   }
-
-  res.status(401).json({ success: false });
+  return res.status(401).json({ success: false });
 });
 
 app.get("/api/check-auth", (req, res) => {
@@ -113,15 +120,29 @@ app.post("/api/logout", (req, res) => {
 ========================= */
 
 app.get("/api/announcements", (req, res) => {
+  announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
   res.json(announcements);
 });
 
 app.post("/api/announcements", (req, res) => {
-  if (!loggedIn) return res.status(401).json({});
+  if (!loggedIn) return res.status(401).json({ success: false });
+
+  announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
 
   const newAnnouncement = {
     id: nextAnnouncementId++,
-    ...req.body,
+    title: req.body.title || "",
+    text: req.body.text || "",
+    color: req.body.color || "bg-blue-100",
+    type: req.body.type || "info",
+    startAt: req.body.startAt || new Date().toISOString(),
+    startPrecision: req.body.startPrecision || "datetime",
+    endAt: req.body.endAt || null,
+    endPrecision: req.body.endPrecision || "datetime",
+    audience: req.body.audience || "all",
+    location: req.body.location || "",
+    isPinned: req.body.isPinned || false,
+    isActive: true,
     createdAt: new Date().toISOString()
   };
 
@@ -134,15 +155,16 @@ app.post("/api/announcements", (req, res) => {
   });
 });
 
-/* ✅ EDIT FIX + SAVE */
 app.put("/api/announcements/:id", (req, res) => {
-  if (!loggedIn) return res.status(401).json({});
+  if (!loggedIn) return res.status(401).json({ success: false });
+
+  announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
 
   const id = Number(req.params.id);
   const index = announcements.findIndex(a => a.id === id);
 
   if (index === -1) {
-    return res.status(404).json({ error: "Not found" });
+    return res.status(404).json({ success: false });
   }
 
   announcements[index] = {
@@ -160,7 +182,9 @@ app.put("/api/announcements/:id", (req, res) => {
 });
 
 app.delete("/api/announcements/:id", (req, res) => {
-  if (!loggedIn) return res.status(401).json({});
+  if (!loggedIn) return res.status(401).json({ success: false });
+
+  announcements = loadJSON(ANNOUNCEMENTS_FILE) || [];
 
   const id = Number(req.params.id);
 
@@ -176,11 +200,12 @@ app.delete("/api/announcements/:id", (req, res) => {
 ========================= */
 
 app.get("/api/content", (req, res) => {
+  content = loadJSON(CONTENT_FILE) || content;
   res.json(content);
 });
 
 app.put("/api/content", (req, res) => {
-  if (!loggedIn) return res.status(401).json({});
+  if (!loggedIn) return res.status(401).json({ success: false });
 
   content = {
     hero: {

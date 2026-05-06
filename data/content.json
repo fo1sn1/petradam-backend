@@ -1,0 +1,15 @@
+{
+  "hero": {
+    "badge": "",
+    "title": "",
+    "titleAccent": "",
+    "subtitle": "",
+    "urgentStripText": "",
+    "urgentStripAction": "",
+    "chipPrimary": "",
+    "chipSecondary": ""
+  },
+  "contact": {
+    "phone": ""
+  }
+}
