@@ -12,12 +12,8 @@ const app = express();
 ========================= */
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("✅ MongoDB connected");
-  })
-  .catch((err) => {
-    console.error("❌ MongoDB error:", err);
-  });
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => console.error("❌ MongoDB error:", err));
 
 /* =========================
    SCHEMAS
@@ -63,11 +59,7 @@ const Content = mongoose.model("Content", ContentSchema);
    MIDDLEWARE
 ========================= */
 
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
-
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -76,7 +68,7 @@ app.use((req, res, next) => {
 });
 
 /* =========================
-   AUTH
+   AUTH (simple)
 ========================= */
 
 let loggedIn = false;
@@ -86,7 +78,6 @@ app.post("/api/login", (req, res) => {
     loggedIn = true;
     return res.json({ success: true });
   }
-
   return res.status(401).json({ success: false });
 });
 
@@ -100,13 +91,13 @@ app.post("/api/logout", (req, res) => {
 });
 
 /* =========================
-   ROUTES (ANNOUNCEMENTS + CONTENT)
+   ANNOUNCEMENTS
 ========================= */
 
 app.get("/api/announcements", async (req, res) => {
   try {
-    const announcements = await Announcement.find().sort({ createdAt: -1 });
-    res.json(announcements);
+    const data = await Announcement.find().sort({ createdAt: -1 });
+    res.json(data);
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false });
@@ -117,13 +108,13 @@ app.post("/api/announcements", async (req, res) => {
   if (!loggedIn) return res.status(401).json({ success: false });
 
   try {
-    const newAnnouncement = await Announcement.create({
+    const created = await Announcement.create({
       ...req.body,
       isActive: true,
       createdAt: new Date().toISOString()
     });
 
-    res.json({ success: true, announcement: newAnnouncement });
+    res.json({ success: true, announcement: created });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false });
@@ -158,6 +149,10 @@ app.delete("/api/announcements/:id", async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
+/* =========================
+   CONTENT
+========================= */
 
 app.get("/api/content", async (req, res) => {
   try {
@@ -198,7 +193,7 @@ app.put("/api/content", async (req, res) => {
 });
 
 /* =========================
-   START SERVER (FIX PRO RENDER)
+   START SERVER (RENDER FIX)
 ========================= */
 
 const PORT = process.env.PORT || 3000;
