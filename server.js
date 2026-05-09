@@ -1,70 +1,70 @@
 import express from "express";
 import cors from "cors";
-import fs from "fs";
-import path from "path";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 
 /* =========================
-   CONFIG
+   DATABASE
 ========================= */
 
-const DATA_DIR = "./data";
-const ANNOUNCEMENTS_FILE = path.join(DATA_DIR, "announcements.json");
-const CONTENT_FILE = path.join(DATA_DIR, "content.json");
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("✅ MongoDB connected");
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB error:", err);
+  });
 
 /* =========================
-   INIT FILES
+   SCHEMAS
 ========================= */
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+const AnnouncementSchema = new mongoose.Schema({
+  title: String,
+  text: String,
+  color: String,
+  type: String,
+  startAt: String,
+  startPrecision: String,
+  endAt: String,
+  endPrecision: String,
+  audience: String,
+  location: String,
+  isPinned: Boolean,
+  isActive: Boolean,
+  createdAt: String,
+  updatedAt: String
+});
 
-if (!fs.existsSync(ANNOUNCEMENTS_FILE)) {
-  fs.writeFileSync(ANNOUNCEMENTS_FILE, "[]");
-}
-
-if (!fs.existsSync(CONTENT_FILE)) {
-  fs.writeFileSync(
-    CONTENT_FILE,
-    JSON.stringify(
-      {
-        hero: {
-          badge: "",
-          title: "",
-          titleAccent: "",
-          subtitle: "",
-          urgentStripText: "",
-          urgentStripAction: "",
-          chipPrimary: "",
-          chipSecondary: ""
-        },
-        contact: {
-          phone: ""
-        }
-      },
-      null,
-      2
-    )
-  );
-}
-
-/* =========================
-   HELPERS (SAFE LOAD/SAVE)
-========================= */
-
-function loadJSON(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf-8"));
-  } catch {
-    return fallback;
+const ContentSchema = new mongoose.Schema({
+  hero: {
+    badge: String,
+    title: String,
+    titleAccent: String,
+    subtitle: String,
+    urgentStripText: String,
+    urgentStripAction: String,
+    chipPrimary: String,
+    chipSecondary: String
+  },
+  contact: {
+    phone: String
   }
-}
+});
 
-function saveJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
+const Announcement = mongoose.model(
+  "Announcement",
+  AnnouncementSchema
+);
+
+const Content = mongoose.model(
+  "Content",
+  ContentSchema
+);
 
 /* =========================
    MIDDLEWARE
@@ -77,7 +77,8 @@ app.use(cors({
 
 app.use(express.json());
 
-/* 🚀 FIX CACHE (důležité proti “F5 cuknutí”) */
+/* FIX CACHE */
+
 app.use((req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
@@ -94,105 +95,216 @@ app.post("/api/login", (req, res) => {
     loggedIn = true;
     return res.json({ success: true });
   }
-  return res.status(401).json({ success: false });
+
+  return res.status(401).json({
+    success: false
+  });
 });
 
 app.get("/api/check-auth", (req, res) => {
-  res.json({ authenticated: loggedIn });
+  res.json({
+    authenticated: loggedIn
+  });
 });
 
 app.post("/api/logout", (req, res) => {
   loggedIn = false;
-  res.json({ success: true });
+
+  res.json({
+    success: true
+  });
 });
 
 /* =========================
-   ANNOUNCEMENTS
+   ANNOUNCEMENTS - GET
 ========================= */
 
-app.get("/api/announcements", (req, res) => {
-  const data = loadJSON(ANNOUNCEMENTS_FILE, []);
-  res.json(data);
+app.get("/api/announcements", async (req, res) => {
+  try {
+    const announcements = await Announcement.find()
+      .sort({ createdAt: -1 });
+
+    res.json(announcements);
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to load announcements"
+    });
+  }
 });
 
-app.post("/api/announcements", (req, res) => {
-  if (!loggedIn) return res.status(401).json({ success: false });
+/* =========================
+   ANNOUNCEMENTS - POST
+========================= */
 
-  const announcements = loadJSON(ANNOUNCEMENTS_FILE, []);
-
-  const newAnnouncement = {
-    id: Date.now(),
-    title: req.body.title || "",
-    text: req.body.text || "",
-    color: req.body.color || "bg-blue-100",
-    type: req.body.type || "info",
-    startAt: req.body.startAt || new Date().toISOString(),
-    startPrecision: req.body.startPrecision || "datetime",
-    endAt: req.body.endAt || null,
-    endPrecision: req.body.endPrecision || "datetime",
-    audience: req.body.audience || "all",
-    location: req.body.location || "",
-    isPinned: req.body.isPinned || false,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  };
-
-  announcements.unshift(newAnnouncement);
-  saveJSON(ANNOUNCEMENTS_FILE, announcements);
-
-  res.json({ success: true, announcement: newAnnouncement });
-});
-
-app.put("/api/announcements/:id", (req, res) => {
-  if (!loggedIn) return res.status(401).json({ success: false });
-
-  const announcements = loadJSON(ANNOUNCEMENTS_FILE, []);
-
-  const id = Number(req.params.id);
-  const index = announcements.findIndex(a => a.id === id);
-
-  if (index === -1) {
-    return res.status(404).json({ success: false });
+app.post("/api/announcements", async (req, res) => {
+  if (!loggedIn) {
+    return res.status(401).json({
+      success: false
+    });
   }
 
-  announcements[index] = {
-    ...announcements[index],
-    ...req.body,
-    updatedAt: new Date().toISOString()
-  };
+  try {
+    const newAnnouncement = await Announcement.create({
+      title: req.body.title || "",
+      text: req.body.text || "",
+      color: req.body.color || "bg-blue-100",
+      type: req.body.type || "info",
+      startAt: req.body.startAt || new Date().toISOString(),
+      startPrecision: req.body.startPrecision || "datetime",
+      endAt: req.body.endAt || null,
+      endPrecision: req.body.endPrecision || "datetime",
+      audience: req.body.audience || "all",
+      location: req.body.location || "",
+      isPinned: req.body.isPinned || false,
+      isActive: true,
+      createdAt: new Date().toISOString()
+    });
 
-  saveJSON(ANNOUNCEMENTS_FILE, announcements);
+    res.json({
+      success: true,
+      announcement: newAnnouncement
+    });
+  } catch (err) {
+    console.error(err);
 
-  res.json({ success: true, announcement: announcements[index] });
-});
-
-app.delete("/api/announcements/:id", (req, res) => {
-  if (!loggedIn) return res.status(401).json({ success: false });
-
-  let announcements = loadJSON(ANNOUNCEMENTS_FILE, []);
-
-  const id = Number(req.params.id);
-  announcements = announcements.filter(a => a.id !== id);
-
-  saveJSON(ANNOUNCEMENTS_FILE, announcements);
-
-  res.json({ success: true });
+    res.status(500).json({
+      success: false,
+      error: "Failed to create announcement"
+    });
+  }
 });
 
 /* =========================
-   CONTENT
+   ANNOUNCEMENTS - PUT
 ========================= */
 
-app.get("/api/content", (req, res) => {
-  const data = loadJSON(CONTENT_FILE, {});
-  res.json(data);
+app.put("/api/announcements/:id", async (req, res) => {
+  if (!loggedIn) {
+    return res.status(401).json({
+      success: false
+    });
+  }
+
+  try {
+    const updatedAnnouncement =
+      await Announcement.findByIdAndUpdate(
+        req.params.id,
+        {
+          ...req.body,
+          updatedAt: new Date().toISOString()
+        },
+        {
+          new: true
+        }
+      );
+
+    if (!updatedAnnouncement) {
+      return res.status(404).json({
+        success: false,
+        error: "Announcement not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      announcement: updatedAnnouncement
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to update announcement"
+    });
+  }
 });
 
-app.put("/api/content", (req, res) => {
-  if (!loggedIn) return res.status(401).json({ success: false });
+/* =========================
+   ANNOUNCEMENTS - DELETE
+========================= */
 
-  const content = {
-    hero: {
+app.delete("/api/announcements/:id", async (req, res) => {
+  if (!loggedIn) {
+    return res.status(401).json({
+      success: false
+    });
+  }
+
+  try {
+    await Announcement.findByIdAndDelete(req.params.id);
+
+    res.json({
+      success: true
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to delete announcement"
+    });
+  }
+});
+
+/* =========================
+   CONTENT - GET
+========================= */
+
+app.get("/api/content", async (req, res) => {
+  try {
+    let content = await Content.findOne();
+
+    if (!content) {
+      content = await Content.create({
+        hero: {
+          badge: "",
+          title: "",
+          titleAccent: "",
+          subtitle: "",
+          urgentStripText: "",
+          urgentStripAction: "",
+          chipPrimary: "",
+          chipSecondary: ""
+        },
+        contact: {
+          phone: ""
+        }
+      });
+    }
+
+    res.json(content);
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to load content"
+    });
+  }
+});
+
+/* =========================
+   CONTENT - PUT
+========================= */
+
+app.put("/api/content", async (req, res) => {
+  if (!loggedIn) {
+    return res.status(401).json({
+      success: false
+    });
+  }
+
+  try {
+    let content = await Content.findOne();
+
+    if (!content) {
+      content = new Content();
+    }
+
+    content.hero = {
       badge: req.body.hero?.badge || "",
       title: req.body.hero?.title || "",
       titleAccent: req.body.hero?.titleAccent || "",
@@ -201,15 +313,26 @@ app.put("/api/content", (req, res) => {
       urgentStripAction: req.body.hero?.urgentStripAction || "",
       chipPrimary: req.body.hero?.chipPrimary || "",
       chipSecondary: req.body.hero?.chipSecondary || ""
-    },
-    contact: {
+    };
+
+    content.contact = {
       phone: req.body.contact?.phone || ""
-    }
-  };
+    };
 
-  saveJSON(CONTENT_FILE, content);
+    await content.save();
 
-  res.json({ success: true, content });
+    res.json({
+      success: true,
+      content
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to save content"
+    });
+  }
 });
 
 /* =========================
@@ -219,5 +342,5 @@ app.put("/api/content", (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  console.log("🚀 Server running on port " + PORT);
 });
