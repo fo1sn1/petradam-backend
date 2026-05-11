@@ -7,25 +7,36 @@ dotenv.config();
 
 const app = express();
 
+/* =========================
+   CACHE FIX
+========================= */
 app.use((req, res, next) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate"
+  );
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   next();
 });
 
 /* =========================
+   MIDDLEWARE
+========================= */
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
+
+/* =========================
    DATABASE
 ========================= */
-
-mongoose.connect(process.env.MONGO_URI)
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB error:", err));
 
 /* =========================
    SCHEMAS
 ========================= */
-
 const AnnouncementSchema = new mongoose.Schema({
   title: String,
   text: String,
@@ -40,7 +51,7 @@ const AnnouncementSchema = new mongoose.Schema({
   isPinned: Boolean,
   isActive: Boolean,
   createdAt: String,
-  updatedAt: String
+  updatedAt: String,
 });
 
 const ContentSchema = new mongoose.Schema({
@@ -52,32 +63,19 @@ const ContentSchema = new mongoose.Schema({
     urgentStripText: String,
     urgentStripAction: String,
     chipPrimary: String,
-    chipSecondary: String
+    chipSecondary: String,
   },
   contact: {
-    phone: String
-  }
+    phone: String,
+  },
 });
 
 const Announcement = mongoose.model("Announcement", AnnouncementSchema);
 const Content = mongoose.model("Content", ContentSchema);
 
 /* =========================
-   MIDDLEWARE
-========================= */
-
-app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
-
-app.use((req, res, next) => {
-  res.set("Cache-Control", "no-store");
-  next();
-});
-
-/* =========================
    AUTH (simple)
 ========================= */
-
 let loggedIn = false;
 
 app.post("/api/login", (req, res) => {
@@ -85,7 +83,7 @@ app.post("/api/login", (req, res) => {
     loggedIn = true;
     return res.json({ success: true });
   }
-  return res.status(401).json({ success: false });
+  return res.status(401).json({ success: false, error: "Wrong password" });
 });
 
 app.get("/api/check-auth", (req, res) => {
@@ -107,29 +105,35 @@ app.get("/api/announcements", async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 app.post("/api/announcements", async (req, res) => {
-  if (!loggedIn) return res.status(401).json({ success: false });
+  if (!loggedIn)
+    return res.status(401).json({ success: false, error: "Not logged in" });
 
   try {
     const created = await Announcement.create({
       ...req.body,
       isActive: true,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     });
 
     res.json({ success: true, announcement: created });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
+/* =========================
+   UPDATE ANNOUNCEMENT (FIXED)
+========================= */
+
 app.put("/api/announcements/:id", async (req, res) => {
-  if (!loggedIn) return res.status(401).json({ success: false });
+  if (!loggedIn)
+    return res.status(401).json({ success: false, error: "Not logged in" });
 
   try {
     const updated = await Announcement.findByIdAndUpdate(
@@ -138,22 +142,33 @@ app.put("/api/announcements/:id", async (req, res) => {
       { new: true }
     );
 
+    if (!updated) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Announcement not found" });
+    }
+
     res.json({ success: true, announcement: updated });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
+/* =========================
+   DELETE
+========================= */
+
 app.delete("/api/announcements/:id", async (req, res) => {
-  if (!loggedIn) return res.status(401).json({ success: false });
+  if (!loggedIn)
+    return res.status(401).json({ success: false, error: "Not logged in" });
 
   try {
     await Announcement.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -168,19 +183,20 @@ app.get("/api/content", async (req, res) => {
     if (!content) {
       content = await Content.create({
         hero: {},
-        contact: {}
+        contact: {},
       });
     }
 
     res.json(content);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 app.put("/api/content", async (req, res) => {
-  if (!loggedIn) return res.status(401).json({ success: false });
+  if (!loggedIn)
+    return res.status(401).json({ success: false, error: "Not logged in" });
 
   try {
     let content = await Content.findOne();
@@ -195,14 +211,13 @@ app.put("/api/content", async (req, res) => {
     res.json({ success: true, content });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /* =========================
-   START SERVER (RENDER FIX)
+   START SERVER
 ========================= */
-
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
