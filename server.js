@@ -79,7 +79,7 @@ const Content = mongoose.model("Content", ContentSchema);
 let loggedIn = false;
 
 app.post("/api/login", (req, res) => {
-  if (req.body.password === "admin") {
+  if (req.body.password === "admin5003") {
     loggedIn = true;
     return res.json({ success: true });
   }
