@@ -50,6 +50,7 @@ const AnnouncementSchema = new mongoose.Schema({
   location: String,
   isPinned: Boolean,
   isActive: Boolean,
+  order: Number,
   createdAt: String,
   updatedAt: String,
 });
@@ -83,7 +84,10 @@ app.post("/api/login", (req, res) => {
     loggedIn = true;
     return res.json({ success: true });
   }
-  return res.status(401).json({ success: false, error: "Wrong password" });
+
+  return res
+    .status(401)
+    .json({ success: false, error: "Wrong password" });
 });
 
 app.get("/api/check-auth", (req, res) => {
@@ -101,57 +105,170 @@ app.post("/api/logout", (req, res) => {
 
 app.get("/api/announcements", async (req, res) => {
   try {
-    const data = await Announcement.find().sort({ createdAt: -1 });
+    const data = await Announcement.find().sort({
+      order: 1,
+      createdAt: -1,
+    });
+
     res.json(data);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: err.message });
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 });
 
 app.post("/api/announcements", async (req, res) => {
-  if (!loggedIn)
-    return res.status(401).json({ success: false, error: "Not logged in" });
+  if (!loggedIn) {
+    return res.status(401).json({
+      success: false,
+      error: "Not logged in",
+    });
+  }
 
   try {
+    const count = await Announcement.countDocuments();
+
     const created = await Announcement.create({
       ...req.body,
+      order: count,
       isActive: true,
       createdAt: new Date().toISOString(),
     });
 
-    res.json({ success: true, announcement: created });
+    res.json({
+      success: true,
+      announcement: created,
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: err.message });
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 });
 
 /* =========================
-   UPDATE ANNOUNCEMENT (FIXED)
+   UPDATE ANNOUNCEMENT
 ========================= */
 
 app.put("/api/announcements/:id", async (req, res) => {
-  if (!loggedIn)
-    return res.status(401).json({ success: false, error: "Not logged in" });
+  if (!loggedIn) {
+    return res.status(401).json({
+      success: false,
+      error: "Not logged in",
+    });
+  }
 
   try {
     const updated = await Announcement.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, updatedAt: new Date().toISOString() },
+      {
+        ...req.body,
+        updatedAt: new Date().toISOString(),
+      },
       { new: true }
     );
 
     if (!updated) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Announcement not found" });
+      return res.status(404).json({
+        success: false,
+        error: "Announcement not found",
+      });
     }
 
-    res.json({ success: true, announcement: updated });
+    res.json({
+      success: true,
+      announcement: updated,
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: err.message });
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+});
+
+/* =========================
+   MOVE ANNOUNCEMENT
+========================= */
+
+app.post("/api/announcements/:id/move", async (req, res) => {
+  if (!loggedIn) {
+    return res.status(401).json({
+      success: false,
+      error: "Not logged in",
+    });
+  }
+
+  try {
+    const { direction } = req.body;
+
+    const announcements = await Announcement.find().sort({
+      order: 1,
+    });
+
+    const index = announcements.findIndex(
+      (a) => a._id.toString() === req.params.id
+    );
+
+    if (index === -1) {
+      return res.status(404).json({
+        success: false,
+        error: "Announcement not found",
+      });
+    }
+
+    let swapIndex;
+
+    if (direction === "up") {
+      swapIndex = index - 1;
+    } else if (direction === "down") {
+      swapIndex = index + 1;
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid direction",
+      });
+    }
+
+    if (
+      swapIndex < 0 ||
+      swapIndex >= announcements.length
+    ) {
+      return res.json({
+        success: true,
+      });
+    }
+
+    const current = announcements[index];
+    const target = announcements[swapIndex];
+
+    const tempOrder = current.order;
+
+    current.order = target.order;
+    target.order = tempOrder;
+
+    await current.save();
+    await target.save();
+
+    res.json({
+      success: true,
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 });
 
@@ -160,15 +277,26 @@ app.put("/api/announcements/:id", async (req, res) => {
 ========================= */
 
 app.delete("/api/announcements/:id", async (req, res) => {
-  if (!loggedIn)
-    return res.status(401).json({ success: false, error: "Not logged in" });
+  if (!loggedIn) {
+    return res.status(401).json({
+      success: false,
+      error: "Not logged in",
+    });
+  }
 
   try {
     await Announcement.findByIdAndDelete(req.params.id);
-    res.json({ success: true });
+
+    res.json({
+      success: true,
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: err.message });
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 });
 
@@ -190,34 +318,52 @@ app.get("/api/content", async (req, res) => {
     res.json(content);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: err.message });
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 });
 
 app.put("/api/content", async (req, res) => {
-  if (!loggedIn)
-    return res.status(401).json({ success: false, error: "Not logged in" });
+  if (!loggedIn) {
+    return res.status(401).json({
+      success: false,
+      error: "Not logged in",
+    });
+  }
 
   try {
     let content = await Content.findOne();
 
-    if (!content) content = new Content();
+    if (!content) {
+      content = new Content();
+    }
 
     content.hero = req.body.hero || {};
     content.contact = req.body.contact || {};
 
     await content.save();
 
-    res.json({ success: true, content });
+    res.json({
+      success: true,
+      content,
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: err.message });
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 });
 
 /* =========================
    START SERVER
 ========================= */
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
